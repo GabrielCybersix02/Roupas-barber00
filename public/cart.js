@@ -1,5 +1,3 @@
-let imageRevision = 0;
-let imageUrl;
 const cartKey = "rc7-cart";
 const cartUrl = "/carrinho";
 const count = document.querySelector("#cart-count");
@@ -59,7 +57,6 @@ function updateCart() {
   }
   document.querySelector("#cart-total").textContent = items.length ? "Valor total: " + formatPrice(total) : "Seu carrinho está vazio.";
   checkout.hidden = items.length === 0;
-  void prepareOrderShare(items, total);
   if (!items.length) return;
   const preview = new URL("/pedido", location.origin);
   const lines = items.map((item, index) => {
@@ -68,45 +65,6 @@ function updateCart() {
   });
   const message = ["Olá! Gostaria de pedir:", "", ...lines, "", "Valor total: " + formatPrice(total), "", "Fotos dos modelos: " + preview.href].join("\n");
   checkout.href = "https://wa.me/" + cart.dataset.phone + "?text=" + encodeURIComponent(message);
-}
-
-async function prepareOrderShare(items, total) {
-  const revision = ++imageRevision;
-  const share = document.querySelector("#cart-share-image");
-  const download = document.querySelector("#cart-download");
-  const status = document.querySelector("#cart-share-status");
-  if (imageUrl) URL.revokeObjectURL(imageUrl);
-  imageUrl = undefined;
-  share.hidden = true;
-  share.onclick = null;
-  download.hidden = true;
-  download.removeAttribute("href");
-  status.hidden = !items.length;
-  if (!items.length) return;
-  status.textContent = "Preparando a imagem do pedido…";
-  try {
-    const { orderImage } = await import("/order-image.js");
-    const file = await orderImage(items, total, formatPrice, () => revision === imageRevision);
-    if (revision !== imageRevision) return;
-    imageUrl = URL.createObjectURL(file);
-    download.href = imageUrl;
-    download.hidden = false;
-    const payload = { files: [file] };
-    share.hidden = !(navigator.share && navigator.canShare?.(payload));
-    status.hidden = !share.hidden;
-    status.textContent = share.hidden ? "Baixe a imagem e anexe na conversa da loja." : "";
-    share.onclick = async () => {
-      try {
-        await navigator.share(payload);
-      } catch (error) {
-        if (error.name === "AbortError" || revision !== imageRevision) return;
-        status.hidden = false;
-        status.textContent = "Baixe a imagem e anexe na conversa da loja.";
-      }
-    };
-  } catch {
-    if (revision === imageRevision) status.textContent = "Não foi possível montar a imagem. Você ainda pode enviar o pedido com o link das fotos.";
-  }
 }
 
 document.querySelector("#model-order")?.addEventListener("submit", event => {
@@ -139,3 +97,4 @@ window.addEventListener("storage", event => {
 });
 window.addEventListener("pageshow", updateCart);
 updateCart();
+
