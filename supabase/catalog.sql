@@ -29,7 +29,7 @@ create policy "Catalog admins manage products" on public.clothing_catalog_produc
   with check ((select exists (select 1 from public.clothing_catalog_admins where user_id = (select auth.uid()))));
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('clothing-catalog-photos', 'clothing-catalog-photos', true, 20971520, array['image/jpeg', 'image/png', 'image/webp']);
+values ('clothing-catalog-photos', 'clothing-catalog-photos', true, 52428800, array['image/jpeg', 'image/png', 'image/webp']);
 
 create policy "Catalog admins read photo objects" on storage.objects for select to authenticated
   using (bucket_id = 'clothing-catalog-photos' and (select exists (select 1 from public.clothing_catalog_admins where user_id = (select auth.uid()))));

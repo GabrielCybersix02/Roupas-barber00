@@ -295,8 +295,8 @@ editor.addEventListener("submit", event => {
     const files = fields.getAll("image").filter(file => file.size > 0);
     if (!files.length && !previous) throw new Error("Adicione pelo menos uma foto.");
     if (files.length > 50 || files.some(file =>
-      file.size > 20 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)
-    )) throw new Error("Selecione até 50 fotos JPG, PNG ou WebP de até 20 MB cada.");
+      file.size > 50 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)
+    )) throw new Error("Selecione até 50 fotos JPG, PNG ou WebP de até 50 MB cada.");
 
     const uploaded = [];
     try {
