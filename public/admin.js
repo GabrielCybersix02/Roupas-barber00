@@ -1,3 +1,5 @@
+import { parseOffer } from "/offer-parser.mjs";
+
 const config = await fetch("/config.json").then(response => response.json());
 const table = "/rest/v1/clothing_catalog_products";
 const bucket = "/storage/v1/object/clothing-catalog-photos/";
@@ -10,6 +12,40 @@ const items = document.querySelector("#items");
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 let token;
 let editing;
+const importer = document.querySelector("#import-offer");
+const photoInput = editor.elements.image;
+const photoPreview = document.querySelector("#photo-preview");
+let previewUrls = [];
+
+function showPhotos() {
+  for (const url of previewUrls) URL.revokeObjectURL(url);
+  previewUrls = [];
+  photoPreview.replaceChildren();
+  for (const [index, file] of [...photoInput.files].slice(0, 50).entries()) {
+    const img = document.createElement("img");
+    img.alt = index === 0 ? "Capa" : "Foto " + (index + 1);
+    img.src = URL.createObjectURL(file);
+    previewUrls.push(img.src);
+    photoPreview.append(img);
+  }
+}
+photoInput.addEventListener("change", showPhotos);
+photoInput.parentElement.addEventListener("dragover", event => event.preventDefault());
+photoInput.parentElement.addEventListener("drop", event => {
+  event.preventDefault();
+  photoInput.files = event.dataTransfer.files;
+  showPhotos();
+});
+
+importer.addEventListener("submit", event => {
+  event.preventDefault();
+  if (editing) resetEditor();
+  const draft = parseOffer(importer.elements.message.value);
+  for (const [key, value] of Object.entries(draft)) editor.elements[key].value = value;
+  editor.querySelector("h2").textContent = "Prévia da oferta";
+  status.textContent = "Confira os dados e adicione as fotos antes de publicar.";
+  editor.scrollIntoView({ behavior: "smooth" });
+});
 
 async function request(path, { method = "GET", body, type = "application/json", representation = false } = {}) {
   if (!config.url || !config.key) throw new Error("A conexão com o catálogo ainda não foi configurada.");
@@ -31,6 +67,7 @@ async function request(path, { method = "GET", body, type = "application/json", 
 function resetEditor() {
   editing = null;
   editor.reset();
+  showPhotos();
   editor.querySelector("h2").textContent = "Cadastrar peça";
   editor.elements.image.required = true;
   cancel.hidden = true;
@@ -43,6 +80,7 @@ function closePanel() {
   login.hidden = false;
   login.reset();
   items.replaceChildren();
+  importer.reset();
   resetEditor();
 }
 
@@ -80,6 +118,7 @@ async function list() {
       editing = product;
       for (const key of ["name", "category", "description", "sizes"]) editor.elements[key].value = product[key];
       editor.elements.price.value = (product.price / 100).toFixed(2).replace(".", ",");
+      editor.elements.old_price.value = product.old_price ? (product.old_price / 100).toFixed(2).replace(".", ",") : "";
       editor.elements.image.required = false;
       editor.querySelector("h2").textContent = "Editar peça";
       cancel.hidden = false;
@@ -89,7 +128,7 @@ async function list() {
       void busy(manager, async () => {
         const removed = await request(table + "?id=eq." + product.id, { method: "DELETE", representation: true });
         if (!removed.length) throw new Error("Peça não encontrada.");
-        await discard(removed[0].image_key);
+        await Promise.all([removed[0].image_key, ...(removed[0].gallery_keys ?? [])].map(discard));
         if (editing?.id === product.id) resetEditor();
         await list();
         status.textContent = "Peça removida.";
@@ -196,28 +235,45 @@ editor.addEventListener("submit", event => {
     if (cents < 1) throw new Error("O preço deve ser maior que zero.");
     const product = Object.fromEntries(["name", "category", "description", "sizes"].map(key => [key, fields.get(key).trim()]));
     if (!product.name || !product.category || !product.description) throw new Error("Preencha nome, categoria e descrição.");
-    const file = fields.get("image");
-    let uploaded;
-    if (file.size) {
-      if (file.size > 5242880 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-        throw new Error("Escolha uma foto JPG, PNG ou WebP de até 5 MB.");
-      }
-      uploaded = crypto.randomUUID();
-      await request(bucket + uploaded, { method: "POST", body: file, type: file.type });
-    }
-    if (!uploaded && !previous) throw new Error("Adicione uma foto.");
+    const oldPrice = String(fields.get("old_price")).trim();
+    if (oldPrice && !/^\d{1,6}(?:[,.]\d{1,2})?$/.test(oldPrice)) throw new Error("Informe um preço anterior válido.");
+    const oldCents = oldPrice ? Math.round(Number(oldPrice.replace(",", ".")) * 100) : null;
+    if (oldCents !== null && oldCents <= cents) throw new Error("O preço anterior precisa ser maior que o preço atual.");
+
+    const files = fields.getAll("image").filter(file => file.size > 0);
+    if (!files.length && !previous) throw new Error("Adicione pelo menos uma foto.");
+    if (files.length > 50 || files.some(file =>
+      file.size > 5242880 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)
+    )) throw new Error("Selecione até 50 fotos JPG, PNG ou WebP de até 5 MB cada.");
+
+    const uploaded = [];
     try {
+      for (const [index, file] of files.entries()) {
+        status.textContent = `Enviando foto ${index + 1} de ${files.length}…`;
+        const key = crypto.randomUUID();
+        uploaded.push(key);
+        await request(bucket + key, { method: "POST", body: file, type: file.type });
+      }
       const changed = await request(table + (previous ? "?id=eq." + previous.id + "&image_key=eq." + previous.image_key : ""), {
         method: previous ? "PATCH" : "POST",
-        body: { ...product, price: cents, image_key: uploaded || previous.image_key },
+        body: {
+          ...product, price: cents, old_price: oldCents,
+          image_key: uploaded[0] ?? previous?.image_key,
+          gallery_keys: uploaded.length ? uploaded.slice(1) : (previous?.gallery_keys ?? []),
+        },
         representation: true,
       });
       if (!changed.length) throw new Error("A peça mudou. Atualize a página e tente novamente.");
     } catch (error) {
-      if (uploaded) await discard(uploaded);
+      // If the publish response was lost, retain any photos referenced by the saved row.
+      if (uploaded.length && token) {
+        const saved = await request(table + "?select=id&image_key=eq." + uploaded[0]).catch(() => null);
+        if (saved?.length === 0) await Promise.all(uploaded.map(discard));
+      }
       throw error;
     }
-    if (uploaded && previous) await discard(previous.image_key);
+    if (uploaded.length && previous) await Promise.all([previous.image_key, ...(previous.gallery_keys ?? [])].map(discard));
+    importer.reset();
     resetEditor();
     await list();
     status.textContent = "Peça publicada no catálogo.";
