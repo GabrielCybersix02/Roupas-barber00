@@ -42,26 +42,39 @@ function catalog(items) {
   </section><section id="catalogo" class="collection wrap"><h2>Explore as peças</h2><p class="eyebrow">Promoção Black das Blacks</p>${items.length ? `<div class="filters"><button type="button" aria-pressed="true">Todas</button>${filters}</div><div class="grid">${cards}</div><script src="/catalog.js" defer></script>` : '<p class="empty">Em breve, novas peças por aqui.</p>'}</section></main>`);
 }
 
-function detail(item, origin) {
+function detail(item, origin, requestedModel) {
   const link = origin + productPath(item);
-  const metadata = { title: item.name + " · " + price(item), description: item.description, image: new URL(image(item), origin).href, url: link, type: "product" };
-  const og = Object.entries(metadata).map(([key, value]) => `<meta property="og:${key}" content="${escape(value)}">`).join("");
-  const message = `Olá! Tenho interesse nesta peça:\n${item.name}\nValor: ${price(item)}\n${link}`;
-  const whatsapp = text => "https://wa.me/" + number + "?text=" + encodeURIComponent(text);
   const galleryImages = item.images?.slice(1) ?? (item.gallery_keys ?? []).map(key => SUPABASE_URL + photos + key);
   const models = [image(item), ...galleryImages];
+  const modelKey = src => new URL(src, origin).pathname.split("/").pop();
+  const modelLink = src => link + "?modelo=" + encodeURIComponent(modelKey(src));
+  const selected = requestedModel === null ? -1 : models.findIndex(src => modelKey(src) === requestedModel);
+  if (requestedModel !== null && selected < 0) return null;
+  const previewImage = models[selected] ?? models[0];
+  const modelLabel = selected < 0 ? "" : "Modelo " + (selected + 1);
+  const metadata = {
+    title: [item.name, modelLabel, price(item)].filter(Boolean).join(" · "),
+    description: item.description,
+    image: new URL(previewImage, origin).href,
+    "image:alt": [item.name, modelLabel].filter(Boolean).join(" — "),
+    url: selected < 0 ? link : modelLink(previewImage),
+    type: "product",
+  };
+  const og = Object.entries(metadata).map(([key, value]) => `<meta property="og:${key}" content="${escape(value)}">`).join("");
+  const message = `Olá! Tenho interesse nesta peça:\n${item.name}\nValor: ${price(item)}`;
+  const whatsapp = text => "https://wa.me/" + number + "?text=" + encodeURIComponent(text);
   const orderButton = href => `<a class="button whatsapp" href="${escape(href)}" target="_blank" rel="noopener noreferrer">Pedir pelo WhatsApp</a>`;
   const gallery = galleryImages.length
     ? `<section class="offer-gallery" id="modelos" aria-label="Fotos e modelos"><h2>Fotos e modelos</h2><div>${models.map((src, i) => {
       const label = "Modelo " + (i + 1);
-      const order = whatsapp(`${message}\n${label}\nFoto: ${new URL(src, origin).href}`);
+      const order = whatsapp(`${message}\n${label}\n${modelLink(src)}`);
       return `<div class="model-option"><a href="${escape(src)}"><img src="${escape(src)}" alt="${escape(item.name)} — ${label}" loading="lazy"></a><span>${label}</span>${number ? `<button type="button" class="secondary" aria-pressed="false" data-order="${escape(order)}" data-model="${label}" aria-label="Escolher peça: ${label}">Escolher peça</button>` : ""}</div>`;
     }).join("")}</div>${number ? '<p id="model-status" aria-live="polite">Escolha um modelo para continuar.</p><a id="model-order" class="button whatsapp" target="_blank" rel="noopener noreferrer" hidden>Pedir pelo WhatsApp</a><script src="/models.js" defer></script>' : ""}</section>`
     : "";
   const orderAction = number
-    ? galleryImages.length ? '<a class="button" href="#modelos">Escolher modelo</a>' : orderButton(whatsapp(message))
+    ? galleryImages.length ? '<a class="button" href="#modelos">Escolher modelo</a>' : orderButton(whatsapp(`${message}\n${link}`))
     : "";
-  return layout(`<main class="wrap detail"><a class="nav" href="/#catalogo">Voltar ao catálogo</a><article><img src="${escape(image(item))}" alt="${escape(item.name)}"><div><p class="eyebrow">${escape(item.category)}</p><h1>${escape(item.name)}</h1>${prices(item)}<p>${escape(item.description)}</p>${item.sizes ? `<p>Tamanhos: ${escape(item.sizes)}</p>` : ""}${orderAction}</div></article>${gallery}</main>`, item.name + " | " + shopName, og);
+  return layout(`<main class="wrap detail"><a class="nav" href="/#catalogo">Voltar ao catálogo</a><article><img src="${escape(previewImage)}" alt="${escape(metadata["image:alt"])}"><div><p class="eyebrow">${escape(item.category)}</p><h1>${escape(item.name)}</h1>${modelLabel ? `<p class="eyebrow">${modelLabel}</p>` : ""}${prices(item)}<p>${escape(item.description)}</p>${item.sizes ? `<p>Tamanhos: ${escape(item.sizes)}</p>` : ""}${orderAction}</div></article>${gallery}</main>`, item.name + " | " + shopName, og);
 }
 
 const admin = `<main class="wrap admin"><h1>Painel ADM</h1>
@@ -100,7 +113,11 @@ http.createServer(async (req, res) => {
     const id = path.slice("/peca/".length);
     if (path.startsWith("/peca/") && uuid.test(id)) {
       const item = offers.find(offer => offer.id === id) ?? (await products("?select=*&id=eq." + id))[0];
-      if (item) return send(200, detail(item, origin));
+      if (item) {
+        const model = new URL(req.url, origin).searchParams.get("modelo");
+        const page = detail(item, origin, model);
+        if (page) return send(200, page);
+      }
     }
     return send(404, layout('<main class="wrap collection"><h2>Página não encontrada</h2><a class="nav" href="/">Voltar ao catálogo</a></main>'));
   } catch (error) {
