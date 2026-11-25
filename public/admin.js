@@ -19,6 +19,7 @@ const maxPhotos = 100;
 const maxPhotoBytes = 50 * 1024 * 1024;
 const photoTypes = ["image/jpeg", "image/png", "image/webp"];
 let selectedPhotos = [];
+let preparedPhotos = new WeakMap();
 let previewUrls = [];
 
 const { name, sizes, details, description, price, old_price: oldPriceField } = editor.elements;
@@ -116,7 +117,7 @@ photoInput.parentElement.addEventListener("drop", event => {
 });
 document.querySelector("#clear-photos").addEventListener("click", () => {
   selectedPhotos = [];
-  showPhotos();
+  preparedPhotos = new WeakMap();  showPhotos();
   status.textContent = "Seleção de fotos limpa.";
 });
 
@@ -190,7 +191,7 @@ function resetEditor() {
   editing = null;
   editor.reset();
   selectedPhotos = [];
-  descriptionEdited = false;
+  preparedPhotos = new WeakMap();  descriptionEdited = false;
   updateDescription();
   showPhotos();
   editor.querySelector("h2").textContent = "Cadastrar peça";
@@ -369,12 +370,26 @@ editor.addEventListener("submit", event => {
     const files = [...selectedPhotos];
     if (!files.length && !previous) throw new Error("Adicione pelo menos uma foto.");
 
+    const invalid = [];
+    for (const [index, file] of files.entries()) {
+      if (preparedPhotos.has(file)) continue;
+      status.textContent = `Verificando foto ${index + 1} de ${files.length}…`;
+      try {
+        preparedPhotos.set(file, await preparePhoto(file));
+      } catch {
+        invalid.push(`${index + 1} (${file.name})`);
+      }
+    }
+    if (invalid.length) {
+      throw new Error(`Não foi possível preparar: ${invalid.join(", ")}. Remova ou substitua essas fotos. As demais continuam selecionadas.`);
+    }
+
     const uploaded = [];
     try {
       for (const [index, file] of files.entries()) {
         status.textContent = `Enviando foto ${index + 1} de ${files.length}…`;
         try {
-          const photo = await preparePhoto(file);
+          const photo = preparedPhotos.get(file);
           const key = crypto.randomUUID();
           uploaded.push(key);
           await request(bucket + key, { method: "POST", body: photo, type: photo.type });
