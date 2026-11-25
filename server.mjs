@@ -42,6 +42,23 @@ function catalog(items) {
   </section><section id="catalogo" class="collection wrap"><h2>Explore as peças</h2><p class="eyebrow">Promoção Black das Blacks</p>${items.length ? `<div class="filters"><button type="button" aria-pressed="true">Todas</button>${filters}</div><div class="grid">${cards}</div><script src="/catalog.js" defer></script>` : '<p class="empty">Em breve, novas peças por aqui.</p>'}</section></main>`);
 }
 
+function orderSizes(raw) {
+  const text = (raw ?? "").toUpperCase().replace(/\bTAMANHO ÚNICO\b|ÚNICO/gu, "U");
+  const alpha = ["PP", "P", "M", "G", "GG", "XG", "XGG", "G1", "G2", "G3", "G4", "G5"];
+  const size = "(?:\\d{1,3}|[A-Z][A-Z0-9]*)";
+  const ranges = new RegExp("\\b(" + size + ")\\s*(?:AO|A|ATÉ|[-–])\\s*(" + size + ")\\b", "gu");
+  const expanded = text.replace(ranges, (match, from, to) => {
+    if (/^\d+$/u.test(from) && /^\d+$/u.test(to)) {
+      const first = Number(from), last = Number(to);
+      if (last >= first && last - first < 50) return Array.from({ length: last - first + 1 }, (_, i) => first + i).join(" ");
+    }
+    const first = alpha.indexOf(from), last = alpha.indexOf(to);
+    return first >= 0 && last >= first ? alpha.slice(first, last + 1).join(" ") : match;
+  });
+  return [...new Set((expanded.match(/\b[A-Z0-9]+\b/g) ?? [])
+    .filter(value => alpha.includes(value) || /^(?:[1-9]\d{0,2}|U)$/u.test(value)))].map(value => value === "U" ? "Único" : value);
+}
+
 function detail(item, origin, requestedModel) {
   const link = origin + productPath(item);
   const galleryImages = item.images?.slice(1) ?? (item.gallery_keys ?? []).map(key => SUPABASE_URL + photos + key);
@@ -63,18 +80,28 @@ function detail(item, origin, requestedModel) {
   const og = Object.entries(metadata).map(([key, value]) => `<meta property="og:${key}" content="${escape(value)}">`).join("");
   const message = `Olá! Tenho interesse nesta peça:\n${item.name}\nValor: ${price(item)}`;
   const whatsapp = text => "https://wa.me/" + number + "?text=" + encodeURIComponent(text);
-  const orderButton = href => `<a class="button whatsapp" href="${escape(href)}" target="_blank" rel="noopener noreferrer">Pedir pelo WhatsApp</a>`;
+  const sizes = orderSizes(item.sizes);
+  const directOrder = selected >= 0
+    ? whatsapp(`${message}\n${modelLabel}\n${modelLink(previewImage)}`)
+    : whatsapp(`${message}\n${link}`);
+  const orderForm = `<form id="model-order" data-order="${escape(directOrder)}" ${galleryImages.length && selected < 0 ? "hidden" : ""}>
+    <label for="order-size">Escolha o tamanho</label>
+    ${sizes.length
+      ? `<select id="order-size" required><option value="">Selecione</option>${sizes.map(size => `<option>${escape(size)}</option>`).join("")}</select>`
+      : '<input id="order-size" type="text" placeholder="Informe o tamanho desejado" maxlength="30" required>'}
+    <button class="button whatsapp" type="submit">Pedir pelo WhatsApp</button>
+  </form>`;
   const gallery = galleryImages.length
     ? `<section class="offer-gallery" id="modelos" aria-label="Fotos e modelos"><h2>Fotos e modelos</h2><div>${models.map((src, i) => {
       const label = "Modelo " + (i + 1);
       const order = whatsapp(`${message}\n${label}\n${modelLink(src)}`);
       return `<div class="model-option"><a href="${escape(src)}"><img src="${escape(src)}" alt="${escape(item.name)} — ${label}" loading="lazy"></a><span>${label}</span>${number ? `<button type="button" class="secondary" aria-pressed="false" data-order="${escape(order)}" data-model="${label}" aria-label="Escolher peça: ${label}">Escolher peça</button>` : ""}</div>`;
-    }).join("")}</div>${number ? '<p id="model-status" aria-live="polite">Escolha um modelo para continuar.</p><a id="model-order" class="button whatsapp" target="_blank" rel="noopener noreferrer" hidden>Pedir pelo WhatsApp</a><script src="/models.js" defer></script>' : ""}</section>`
+    }).join("")}</div>${number ? `<p id="model-status" aria-live="polite">${modelLabel ? escape(modelLabel) + " escolhido." : "Escolha um modelo para continuar."}</p>${orderForm}` : ""}</section>`
     : "";
   const orderAction = number
-    ? galleryImages.length ? '<a class="button" href="#modelos">Escolher modelo</a>' : orderButton(whatsapp(`${message}\n${link}`))
+    ? galleryImages.length ? '<a class="button" href="#modelos">Escolher modelo</a>' : orderForm
     : "";
-  return layout(`<main class="wrap detail"><a class="nav" href="/#catalogo">Voltar ao catálogo</a><article><img src="${escape(previewImage)}" alt="${escape(metadata["image:alt"])}"><div><p class="eyebrow">${escape(item.category)}</p><h1>${escape(item.name)}</h1>${modelLabel ? `<p class="eyebrow">${modelLabel}</p>` : ""}${prices(item)}<p>${escape(item.description)}</p>${item.sizes ? `<p>Tamanhos: ${escape(item.sizes)}</p>` : ""}${orderAction}</div></article>${gallery}</main>`, item.name + " | " + shopName, og);
+  return layout(`<main class="wrap detail"><a class="nav" href="/#catalogo">Voltar ao catálogo</a><article><img src="${escape(previewImage)}" alt="${escape(metadata["image:alt"])}"><div><p class="eyebrow">${escape(item.category)}</p><h1>${escape(item.name)}</h1>${modelLabel ? `<p class="eyebrow">${modelLabel}</p>` : ""}${prices(item)}<p>${escape(item.description)}</p>${item.sizes ? `<p>Tamanhos: ${escape(item.sizes)}</p>` : ""}${orderAction}</div></article>${gallery}${number ? '<script src="/models.js?v=size" defer></script>' : ""}</main>`, item.name + " | " + shopName, og);
 }
 
 const admin = `<main class="wrap admin"><h1>Painel ADM</h1>
