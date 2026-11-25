@@ -122,3 +122,5 @@ h3{font-size:1.15rem}
 
 .photo-preview { display: flex; flex-wrap: wrap; gap: .5rem; }
 .photo-preview img { width: 72px; height: 85px; border-radius: 5px; object-fit: cover; }
+
+.caption-preview { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }

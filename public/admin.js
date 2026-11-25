@@ -17,6 +17,50 @@ const photoInput = editor.elements.image;
 const photoPreview = document.querySelector("#photo-preview");
 let previewUrls = [];
 
+const { name, sizes, details, description, price, old_price: oldPriceField } = editor.elements;
+const caption = document.querySelector("#caption-preview");
+let descriptionEdited = false;
+
+function catalogAmount(value) {
+  const text = value.trim();
+  if (!/^\d{1,6}(?:[,.]\d{1,2})?$/.test(text)) return "";
+  const amount = Number(text.replace(",", "."));
+  return amount > 0 ? currency.format(amount) : "";
+}
+
+function updateDescription() {
+  const title = name.value.trim();
+  if (!descriptionEdited) {
+    const notes = details.value.trim();
+    const sizeRange = sizes.value.trim();
+    description.value = title
+      ? notes || (sizeRange ? `${title}. Tamanhos disponíveis: ${sizeRange}.` : title + ".")
+      : "";
+  }
+  const promotional = catalogAmount(price.value);
+  const previous = catalogAmount(oldPriceField.value);
+  const lines = [
+    previous && promotional ? "⚫ PROMOÇÃO BLACK DAS BLACKS" : "",
+    title ? "✔️ " + title.toLocaleUpperCase("pt-BR") : "",
+    ...description.value.trim().split(/\n+/).map(line => line.trim())
+      .filter(line => line && !line.startsWith(title + ".")).map(line => "➖ " + line),
+    sizes.value.trim() ? "➖ Tam: " + sizes.value.trim() : "",
+    previous && promotional ? "💰 ATACADO DA BLACK" : "",
+    previous && promotional ? "De: " + previous : "",
+    promotional ? (previous ? "Por: " : "Preço: ") + promotional : "",
+  ];
+  caption.textContent = lines.filter(Boolean).join("\n");
+}
+
+editor.addEventListener("input", event => {
+  if (event.target === description) descriptionEdited = Boolean(description.value.trim());
+  updateDescription();
+});
+document.querySelector("#regenerate-description").addEventListener("click", () => {
+  descriptionEdited = false;
+  updateDescription();
+});
+
 function showPhotos() {
   for (const url of previewUrls) URL.revokeObjectURL(url);
   previewUrls = [];
@@ -42,6 +86,9 @@ importer.addEventListener("submit", event => {
   if (editing) resetEditor();
   const draft = parseOffer(importer.elements.message.value);
   for (const [key, value] of Object.entries(draft)) editor.elements[key].value = value;
+  details.value = draft.description;
+  descriptionEdited = false;
+  updateDescription();
   editor.querySelector("h2").textContent = "Prévia da oferta";
   status.textContent = "Confira os dados e adicione as fotos antes de publicar.";
   editor.scrollIntoView({ behavior: "smooth" });
@@ -67,6 +114,8 @@ async function request(path, { method = "GET", body, type = "application/json", 
 function resetEditor() {
   editing = null;
   editor.reset();
+  descriptionEdited = false;
+  updateDescription();
   showPhotos();
   editor.querySelector("h2").textContent = "Cadastrar peça";
   editor.elements.image.required = true;
@@ -119,6 +168,9 @@ async function list() {
       for (const key of ["name", "category", "description", "sizes"]) editor.elements[key].value = product[key];
       editor.elements.price.value = (product.price / 100).toFixed(2).replace(".", ",");
       editor.elements.old_price.value = product.old_price ? (product.old_price / 100).toFixed(2).replace(".", ",") : "";
+      details.value = product.description;
+      descriptionEdited = true;
+      updateDescription();
       editor.elements.image.required = false;
       editor.querySelector("h2").textContent = "Editar peça";
       cancel.hidden = false;

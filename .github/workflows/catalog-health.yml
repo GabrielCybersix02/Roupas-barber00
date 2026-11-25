@@ -1,0 +1,22 @@
+name: Verificar disponibilidade do catálogo
+
+on:
+  schedule:
+    - cron: '3,13,23,33,43,53 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/catalog-health.yml
+
+permissions: {}
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Consultar o catálogo
+        run: |
+          status="$(curl --fail --silent --show-error --max-time 90 --retry 1 https://rc7multimarcas.onrender.com/health)"
+          test "$status" = ok
