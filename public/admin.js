@@ -75,7 +75,19 @@ function showPhotos() {
     img.alt = index === 0 ? "Capa" : "Foto " + (index + 1);
     img.src = URL.createObjectURL(file);
     previewUrls.push(img.src);
-    photoPreview.append(img);
+    const tile = document.createElement("div");
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary";
+    remove.textContent = "Remover";
+    remove.setAttribute("aria-label", "Remover foto " + (index + 1) + ": " + file.name);
+    remove.addEventListener("click", () => {
+      selectedPhotos.splice(index, 1);
+      showPhotos();
+      status.textContent = `${selectedPhotos.length} de ${maxPhotos} fotos selecionadas.`;
+    });
+    tile.append(img, remove);
+    photoPreview.append(tile);
   }
 }
 function addPhotos(files) {
@@ -109,19 +121,36 @@ document.querySelector("#clear-photos").addEventListener("click", () => {
 });
 
 async function preparePhoto(file) {
-  const bitmap = await createImageBitmap(file);
+  let source;
+  let url;
   try {
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    try {
+      source = await createImageBitmap(file);
+    } catch {
+      url = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = url;
+      try {
+        await img.decode();
+      } catch {
+        throw new Error("Não foi possível abrir esta imagem. Remova só esta foto ou adicione uma cópia salva como JPG ou PNG.");
+      }
+      source = img;
+    }
+    const width = source.naturalWidth ?? source.width;
+    const height = source.naturalHeight ?? source.height;
+    const scale = Math.min(1, 1600 / Math.max(width, height));
     if (scale === 1 && file.size <= 1024 * 1024) return file;
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
     const optimized = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.84));
     if (!optimized || optimized.size > maxPhotoBytes) throw new Error("Não foi possível otimizar a imagem.");
     return optimized;
   } finally {
-    bitmap.close();
+    source?.close?.();
+    if (url) URL.revokeObjectURL(url);
   }
 }
 
@@ -344,10 +373,10 @@ editor.addEventListener("submit", event => {
     try {
       for (const [index, file] of files.entries()) {
         status.textContent = `Enviando foto ${index + 1} de ${files.length}…`;
-        const key = crypto.randomUUID();
-        uploaded.push(key);
         try {
           const photo = await preparePhoto(file);
+          const key = crypto.randomUUID();
+          uploaded.push(key);
           await request(bucket + key, { method: "POST", body: photo, type: photo.type });
         } catch (error) {
           throw new Error(`Foto ${index + 1} de ${files.length} (${file.name}): ${error.message}`);
