@@ -39,6 +39,7 @@ function resetEditor() {
 function closePanel() {
   token = null;
   manager.hidden = true;
+  document.querySelector("#new-password").hidden = true;
   login.hidden = false;
   login.reset();
   items.replaceChildren();
@@ -103,6 +104,53 @@ async function discard(key) {
   try { await request(bucket + key, { method: "DELETE" }); }
   catch { /* The published product never points to an image removed here. */ }
 }
+
+const recovery = document.querySelector("#recovery");
+const newPassword = document.querySelector("#new-password");
+const callback = new URLSearchParams(location.hash.slice(1));
+if (callback.get("type") === "recovery" && callback.get("access_token")) {
+  token = callback.get("access_token");
+  history.replaceState(null, "", location.pathname);
+  login.hidden = true;
+  newPassword.hidden = false;
+} else if (callback.has("error_code")) {
+  history.replaceState(null, "", location.pathname);
+  status.textContent = "O link de recuperação é inválido ou expirou. Solicite outro.";
+}
+
+document.querySelector("#forgot").addEventListener("click", () => {
+  recovery.elements.email.value = login.elements.email.value;
+  login.hidden = true;
+  recovery.hidden = false;
+  recovery.elements.email.focus();
+});
+
+recovery.addEventListener("submit", event => {
+  event.preventDefault();
+  void busy(recovery, async () => {
+    const redirect = encodeURIComponent(new URL("/admin", location.origin).href);
+    await request("/auth/v1/recover?redirect_to=" + redirect, {
+      method: "POST",
+      body: { email: recovery.elements.email.value.trim() },
+    });
+    status.textContent = "Se o e-mail estiver cadastrado, você receberá um link. Confira também o spam.";
+  });
+});
+
+newPassword.addEventListener("submit", event => {
+  event.preventDefault();
+  void busy(newPassword, async () => {
+    const { password, confirmation } = newPassword.elements;
+    if (password.value !== confirmation.value) throw new Error("As senhas precisam ser iguais.");
+    await request("/auth/v1/user", { method: "PUT", body: { password: password.value } });
+    try { await request("/auth/v1/logout?scope=local", { method: "POST" }); }
+    catch { /* Discard the recovery token locally if logout is unavailable. */ }
+    newPassword.reset();
+    newPassword.hidden = true;
+    closePanel();
+    status.textContent = "Senha atualizada. Entre com a nova senha.";
+  });
+});
 
 login.addEventListener("submit", event => {
   event.preventDefault();
