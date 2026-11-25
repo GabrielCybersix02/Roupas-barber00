@@ -15,7 +15,7 @@ let editing;
 const importer = document.querySelector("#import-offer");
 const photoInput = editor.elements.image;
 const photoPreview = document.querySelector("#photo-preview");
-const maxPhotos = 25;
+const maxPhotos = 100;
 const maxPhotoBytes = 50 * 1024 * 1024;
 const photoTypes = ["image/jpeg", "image/png", "image/webp"];
 let selectedPhotos = [];
