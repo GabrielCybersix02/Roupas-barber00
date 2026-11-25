@@ -16,7 +16,11 @@ function readCart() {
 
 function updateCart() {
   const items = readCart();
-  if (count) count.textContent = items.length ? "(" + items.length + ")" : "";
+  if (count) {
+    count.textContent = String(items.length);
+    count.hidden = items.length === 0;
+    count.parentElement.setAttribute("aria-label", "Carrinho, " + items.length + (items.length === 1 ? " peça" : " peças"));
+  }
   if (!cart) return;
   const list = document.querySelector("#cart-items");
   const checkout = document.querySelector("#cart-whatsapp");
