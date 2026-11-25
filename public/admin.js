@@ -15,6 +15,10 @@ let editing;
 const importer = document.querySelector("#import-offer");
 const photoInput = editor.elements.image;
 const photoPreview = document.querySelector("#photo-preview");
+const maxPhotos = 25;
+const maxPhotoBytes = 50 * 1024 * 1024;
+const photoTypes = ["image/jpeg", "image/png", "image/webp"];
+let selectedPhotos = [];
 let previewUrls = [];
 
 const { name, sizes, details, description, price, old_price: oldPriceField } = editor.elements;
@@ -65,21 +69,61 @@ function showPhotos() {
   for (const url of previewUrls) URL.revokeObjectURL(url);
   previewUrls = [];
   photoPreview.replaceChildren();
-  for (const [index, file] of [...photoInput.files].slice(0, 50).entries()) {
+  for (const [index, file] of selectedPhotos.entries()) {
     const img = document.createElement("img");
+    img.loading = "lazy";
     img.alt = index === 0 ? "Capa" : "Foto " + (index + 1);
     img.src = URL.createObjectURL(file);
     previewUrls.push(img.src);
     photoPreview.append(img);
   }
 }
-photoInput.addEventListener("change", showPhotos);
+function addPhotos(files) {
+  const incoming = [...files];
+  if (incoming.some(file => !file.size || file.size > maxPhotoBytes || !photoTypes.includes(file.type))) {
+    status.textContent = "Escolha fotos JPG, PNG ou WebP de até 50 MB cada.";
+    return;
+  }
+  if (selectedPhotos.length + incoming.length > maxPhotos) {
+    status.textContent = `Você já selecionou ${selectedPhotos.length} fotos. O limite é de ${maxPhotos} por peça.`;
+    return;
+  }
+  selectedPhotos.push(...incoming);
+  showPhotos();
+  status.textContent = `${selectedPhotos.length} de ${maxPhotos} fotos selecionadas.`;
+}
+
+photoInput.addEventListener("change", () => {
+  addPhotos(photoInput.files);
+  photoInput.value = "";
+});
 photoInput.parentElement.addEventListener("dragover", event => event.preventDefault());
 photoInput.parentElement.addEventListener("drop", event => {
   event.preventDefault();
-  photoInput.files = event.dataTransfer.files;
-  showPhotos();
+  addPhotos(event.dataTransfer.files);
 });
+document.querySelector("#clear-photos").addEventListener("click", () => {
+  selectedPhotos = [];
+  showPhotos();
+  status.textContent = "Seleção de fotos limpa.";
+});
+
+async function preparePhoto(file) {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size <= 1024 * 1024) return file;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const optimized = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.84));
+    if (!optimized || optimized.size > maxPhotoBytes) throw new Error("Não foi possível otimizar a imagem.");
+    return optimized;
+  } finally {
+    bitmap.close();
+  }
+}
 
 importer.addEventListener("submit", event => {
   event.preventDefault();
@@ -107,18 +151,20 @@ async function request(path, { method = "GET", body, type = "application/json", 
     closePanel();
     throw new Error("Sua sessão expirou. Entre novamente.");
   }
-  if (!response.ok) throw new Error("Não foi possível concluir a operação.");
+  if (!response.ok) throw new Error(path.startsWith(bucket)
+    ? `O armazenamento recusou o envio (HTTP ${response.status}).`
+    : "Não foi possível concluir a operação.");
   return response.status === 204 ? null : response.json();
 }
 
 function resetEditor() {
   editing = null;
   editor.reset();
+  selectedPhotos = [];
   descriptionEdited = false;
   updateDescription();
   showPhotos();
   editor.querySelector("h2").textContent = "Cadastrar peça";
-  editor.elements.image.required = true;
   cancel.hidden = true;
 }
 
@@ -171,7 +217,6 @@ async function list() {
       details.value = product.description;
       descriptionEdited = true;
       updateDescription();
-      editor.elements.image.required = false;
       editor.querySelector("h2").textContent = "Editar peça";
       cancel.hidden = false;
       editor.scrollIntoView({ behavior: "smooth" });
@@ -292,11 +337,8 @@ editor.addEventListener("submit", event => {
     const oldCents = oldPrice ? Math.round(Number(oldPrice.replace(",", ".")) * 100) : null;
     if (oldCents !== null && oldCents <= cents) throw new Error("O preço anterior precisa ser maior que o preço atual.");
 
-    const files = fields.getAll("image").filter(file => file.size > 0);
+    const files = [...selectedPhotos];
     if (!files.length && !previous) throw new Error("Adicione pelo menos uma foto.");
-    if (files.length > 50 || files.some(file =>
-      file.size > 50 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)
-    )) throw new Error("Selecione até 50 fotos JPG, PNG ou WebP de até 50 MB cada.");
 
     const uploaded = [];
     try {
@@ -304,7 +346,12 @@ editor.addEventListener("submit", event => {
         status.textContent = `Enviando foto ${index + 1} de ${files.length}…`;
         const key = crypto.randomUUID();
         uploaded.push(key);
-        await request(bucket + key, { method: "POST", body: file, type: file.type });
+        try {
+          const photo = await preparePhoto(file);
+          await request(bucket + key, { method: "POST", body: photo, type: photo.type });
+        } catch (error) {
+          throw new Error(`Foto ${index + 1} de ${files.length} (${file.name}): ${error.message}`);
+        }
       }
       const changed = await request(table + (previous ? "?id=eq." + previous.id + "&image_key=eq." + previous.image_key : ""), {
         method: previous ? "PATCH" : "POST",
