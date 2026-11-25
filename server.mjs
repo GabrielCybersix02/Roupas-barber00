@@ -1,0 +1,81 @@
+import http from "node:http";
+import { readFile } from "node:fs/promises";
+
+const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, WHATSAPP_NUMBER, RENDER_EXTERNAL_URL } = process.env;
+const shopName = process.env.SHOP_NAME || "Catálogo de roupas";
+const number = (WHATSAPP_NUMBER || "").replace(/\D/g, "");
+const table = "/rest/v1/clothing_catalog_products";
+const photos = "/storage/v1/object/public/clothing-catalog-photos/";
+const uuid = /^[0-9a-f-]{36}$/;
+const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const escape = value => String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
+const price = product => currency.format(product.price / 100);
+const image = product => SUPABASE_URL + photos + product.image_key;
+const productPath = product => "/peca/" + product.id;
+
+async function products(query) {
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) throw new Error("Supabase ausente");
+  const response = await fetch(SUPABASE_URL + table + query, {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error("Falha no catálogo: " + response.status);
+  return response.json();
+}
+
+function layout(body, title = shopName, openGraph = "") {
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><link rel="stylesheet" href="/style.css">${openGraph}</head><body><header class="top"><div class="wrap bar"><a class="brand" href="/">${escape(shopName)}</a><a class="nav" href="/#catalogo">Ver peças</a></div></header>${body}</body></html>`;
+}
+
+function catalog(items) {
+  const categories = [...new Set(items.map(item => item.category))];
+  const cards = items.map(item => `<a class="card" data-category="${escape(item.category)}" href="${productPath(item)}"><img src="${escape(image(item))}" alt="${escape(item.name)}" loading="lazy"><div class="card-copy"><span class="eyebrow">${escape(item.category)}</span><h3>${escape(item.name)}</h3><strong>${price(item)}</strong></div></a>`).join("");
+  const filters = categories.map(category => `<button type="button" data-category="${escape(category)}" aria-pressed="false">${escape(category)}</button>`).join("");
+  return layout(`<main><section class="hero wrap"><div class="hero-copy"><h1>Seu estilo.<br><em>Suas escolhas.</em></h1><a class="button" href="#catalogo">Explorar peças</a></div></section><section id="catalogo" class="collection wrap"><h2>Explore as peças</h2>${items.length ? `<div class="filters"><button type="button" aria-pressed="true">Todas</button>${filters}</div><div class="grid">${cards}</div><script src="/catalog.js" defer></script>` : '<p class="empty">Em breve, novas peças por aqui.</p>'}</section></main>`);
+}
+
+function detail(item, origin) {
+  const link = origin + productPath(item);
+  const metadata = { title: item.name + " · " + price(item), description: item.description, image: image(item), url: link, type: "product" };
+  const og = Object.entries(metadata).map(([key, value]) => `<meta property="og:${key}" content="${escape(value)}">`).join("");
+  const message = `Olá! Tenho interesse nesta peça:\n${item.name}\nValor: ${price(item)}\n${link}`;
+  const whatsapp = "https://wa.me/" + number + "?text=" + encodeURIComponent(message);
+  return layout(`<main class="wrap detail"><a class="nav" href="/#catalogo">Voltar ao catálogo</a><article><img src="${escape(image(item))}" alt="${escape(item.name)}"><div><p class="eyebrow">${escape(item.category)}</p><h1>${escape(item.name)}</h1><strong>${price(item)}</strong><p>${escape(item.description)}</p>${item.sizes ? `<p>Tamanhos: ${escape(item.sizes)}</p>` : ""}${number ? `<a class="button whatsapp" href="${escape(whatsapp)}" target="_blank" rel="noopener noreferrer">Pedir pelo WhatsApp</a>` : ""}</div></article></main>`, item.name, og);
+}
+
+const admin = `<main class="wrap admin"><h1>Painel ADM</h1>
+<form id="login" class="editor"><label>E-mail<input name="email" type="email" autocomplete="username" required></label><label>Senha<input name="password" type="password" autocomplete="current-password" required></label><button class="button">Entrar</button></form>
+<section id="manager" hidden><button type="button" class="secondary" id="logout">Sair</button>
+<form class="editor" id="editor"><h2>Cadastrar peça</h2><label>Nome<input name="name" maxlength="100" required></label><div class="fields"><label>Categoria<input name="category" maxlength="60" placeholder="Ex.: Camisetas" required></label><label>Preço (R$)<input name="price" inputmode="decimal" placeholder="79,90" required maxlength="10"></label></div><label>Descrição<textarea name="description" maxlength="2000" required></textarea></label><label>Tamanhos disponíveis<input name="sizes" maxlength="100" placeholder="P, M, G, GG"></label><label>Foto da peça<input name="image" type="file" accept="image/jpeg,image/png,image/webp" required></label><span class="muted">JPG, PNG ou WebP de até 5 MB.</span><div class="actions"><button class="button">Publicar peça</button><button type="button" class="secondary" id="cancel" hidden>Cancelar edição</button></div></form>
+<h2>Peças publicadas</h2><div id="items"></div></section><p id="status" class="notice" role="status"></p></main><script src="/admin.js" type="module"></script>`;
+
+const assets = { "/style.css": "text/css; charset=utf-8", "/admin.js": "text/javascript; charset=utf-8", "/catalog.js": "text/javascript; charset=utf-8", "/hero.webp": "image/webp" };
+
+http.createServer(async (req, res) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Frame-Options", "DENY");
+  const origin = RENDER_EXTERNAL_URL || "http://localhost:" + (process.env.PORT || 3000);
+  const path = new URL(req.url, origin).pathname;
+  const send = (status, body, type = "text/html; charset=utf-8") => {
+    res.writeHead(status, { "Content-Type": type });
+    res.end(req.method === "HEAD" ? undefined : body);
+  };
+  if (!["GET", "HEAD"].includes(req.method)) return send(405, "Método não permitido.");
+  try {
+    if (Object.hasOwn(assets, path)) return send(200, await readFile(new URL("./public" + path, import.meta.url)), assets[path]);
+    if (path === "/health") return send(200, "ok", "text/plain");
+    if (path === "/config.json") return send(200, JSON.stringify({ url: SUPABASE_URL, key: SUPABASE_PUBLISHABLE_KEY }), "application/json");
+    if (path === "/admin" || path === "/admin/") return send(200, layout(admin, "Painel ADM"));
+    if (path === "/") return send(200, catalog(await products("?select=*&order=created_at.desc")));
+    const id = path.slice("/peca/".length);
+    if (path.startsWith("/peca/") && uuid.test(id)) {
+      const [item] = await products("?select=*&id=eq." + id);
+      if (item) return send(200, detail(item, origin));
+    }
+    return send(404, layout('<main class="wrap collection"><h2>Página não encontrada</h2><a class="nav" href="/">Voltar ao catálogo</a></main>'));
+  } catch (error) {
+    console.error(error.message);
+    return send(503, layout('<main class="wrap collection"><h2>Catálogo temporariamente indisponível</h2><p>Tente novamente em instantes.</p></main>'));
+  }
+}).listen(Number(process.env.PORT || 3000), "0.0.0.0");

@@ -1,0 +1,8 @@
+{
+  "name": "catalogo-roupas",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node server.mjs" }
+}
