@@ -1,0 +1,194 @@
+[
+  {
+    "id": "0ca06c4a-0f75-5748-85ef-45d99fe4f68c",
+    "name": "Short Moletinho",
+    "category": "Shorts",
+    "old_price": 8000,
+    "price": 6500,
+    "sizes": "Consulte os tamanhos",
+    "description": "Moletinho encorpado com três bolsos e cordão grosso. Acompanha etiquetas e embalagem padrão.",
+    "images": [
+      "/promo/1000051533.webp"
+    ]
+  },
+  {
+    "id": "f0acab46-b4a8-5acd-8342-1d686480e05f",
+    "name": "Camisa Dri-Fit",
+    "category": "Camisetas",
+    "old_price": 6000,
+    "price": 4000,
+    "sizes": "P, M, G e GG",
+    "description": "Dri-fit premium em cores variadas. Modelos Nike, Mizuno, Adidas, Under Armour e Puma.",
+    "images": [
+      "/promo/1000051534.webp",
+      "/promo/1000051535.webp",
+      "/promo/1000051536.webp",
+      "/promo/1000051537.webp",
+      "/promo/1000051538.webp"
+    ]
+  },
+  {
+    "id": "06cec5a4-27be-5562-ba44-6ac98ffae743",
+    "name": "Polo Básica Malha Fria",
+    "category": "Polos",
+    "old_price": 8000,
+    "price": 6000,
+    "sizes": "P, GG, G1 e G2",
+    "description": "Polo básica em malha fria, sem marca.",
+    "images": [
+      "/promo/1000051539.webp",
+      "/promo/1000051540.webp",
+      "/promo/1000051541.webp",
+      "/promo/1000051542.webp",
+      "/promo/1000051543.webp",
+      "/promo/1000051544.webp",
+      "/promo/1000051545.webp",
+      "/promo/1000051546.webp",
+      "/promo/1000051547.webp",
+      "/promo/1000051548.webp"
+    ]
+  },
+  {
+    "id": "51698b9e-1844-5eb7-a163-5383d5554009",
+    "name": "Bermuda Sarja",
+    "category": "Bermudas",
+    "old_price": 8000,
+    "price": 6000,
+    "sizes": "36 ao 48",
+    "description": "Sarja com lycra, bom caimento e etiquetas.",
+    "images": [
+      "/promo/1000051550.webp",
+      "/promo/1000051551.webp",
+      "/promo/1000051552.webp",
+      "/promo/1000051553.webp",
+      "/promo/1000051554.webp",
+      "/promo/1000051555.webp"
+    ]
+  },
+  {
+    "id": "3d9966fe-75db-5134-840f-75b9464172b3",
+    "name": "Camisa Suedine",
+    "category": "Camisetas",
+    "old_price": 8000,
+    "price": 5000,
+    "sizes": "GG",
+    "description": "Malhão macio e confortável, com etiquetas de alta gramatura.",
+    "images": [
+      "/promo/1000051556.webp",
+      "/promo/1000051557.webp",
+      "/promo/1000051558.webp",
+      "/promo/1000051559.webp",
+      "/promo/1000051560.webp",
+      "/promo/1000051561.webp",
+      "/promo/1000051562.webp",
+      "/promo/1000051563.webp",
+      "/promo/1000051564.webp",
+      "/promo/1000051565.webp",
+      "/promo/1000051566.webp",
+      "/promo/1000051567.webp",
+      "/promo/1000051568.webp",
+      "/promo/1000051569.webp",
+      "/promo/1000051570.webp",
+      "/promo/1000051571.webp",
+      "/promo/1000051572.webp",
+      "/promo/1000051573.webp",
+      "/promo/1000051574.webp",
+      "/promo/1000051575.webp",
+      "/promo/1000051576.webp",
+      "/promo/1000051577.webp",
+      "/promo/1000051578.webp"
+    ]
+  },
+  {
+    "id": "1e724448-8f3e-5dae-bcc7-b45e3e1ac100",
+    "name": "Calça Jeans",
+    "category": "Calças",
+    "old_price": 10000,
+    "price": 7000,
+    "sizes": "36 ao 48, conforme o modelo",
+    "description": "Jeans com lycra em diferentes lavagens.",
+    "images": [
+      "/promo/1000051582.webp",
+      "/promo/1000051583.webp",
+      "/promo/1000051584.webp",
+      "/promo/1000051585.webp",
+      "/promo/1000051586.webp",
+      "/promo/1000051587.webp",
+      "/promo/1000051588.webp",
+      "/promo/1000051589.webp",
+      "/promo/1000051590.webp",
+      "/promo/1000051591.webp",
+      "/promo/1000051592.webp",
+      "/promo/1000051593.webp",
+      "/promo/1000051594.webp"
+    ]
+  },
+  {
+    "id": "8789d2f6-8dbe-5a13-819c-9d97c3f66744",
+    "name": "Bermuda Jeans",
+    "category": "Bermudas",
+    "old_price": 9000,
+    "price": 6000,
+    "sizes": "36 ao 48, conforme o modelo",
+    "description": "Modelos lisos com lycra e modelos rasgados sem lycra.",
+    "images": [
+      "/promo/1000051595.webp",
+      "/promo/1000051596.webp",
+      "/promo/1000051597.webp",
+      "/promo/1000051598.webp",
+      "/promo/1000051599.webp",
+      "/promo/1000051600.webp",
+      "/promo/1000051601.webp",
+      "/promo/1000051602.webp",
+      "/promo/1000051603.webp",
+      "/promo/1000051604.webp",
+      "/promo/1000051605.webp"
+    ]
+  },
+  {
+    "id": "54ed5242-091b-54ef-8aa7-e6eb8cd1d3b5",
+    "name": "Regata de Basquete",
+    "category": "Regatas",
+    "old_price": 7000,
+    "price": 5500,
+    "sizes": "P, M, G e GG",
+    "description": "Regata de basquete em tecido dri-fit.",
+    "images": [
+      "/promo/1000051606.webp",
+      "/promo/1000051607.webp",
+      "/promo/1000051608.webp",
+      "/promo/1000051609.webp",
+      "/promo/1000051610.webp",
+      "/promo/1000051611.webp",
+      "/promo/1000051612.webp",
+      "/promo/1000051613.webp",
+      "/promo/1000051614.webp",
+      "/promo/1000051615.webp",
+      "/promo/1000051616.webp",
+      "/promo/1000051617.webp",
+      "/promo/1000051618.webp",
+      "/promo/1000051619.webp",
+      "/promo/1000051620.webp",
+      "/promo/1000051621.webp",
+      "/promo/1000051622.webp",
+      "/promo/1000051623.webp",
+      "/promo/1000051624.webp",
+      "/promo/1000051625.webp"
+    ]
+  },
+  {
+    "id": "c05ea2e9-9efa-5eb0-b83b-53c504bdea46",
+    "name": "Short Sarja Premium",
+    "category": "Shorts",
+    "old_price": 9000,
+    "price": 7000,
+    "sizes": "P ao GG",
+    "description": "Sarja com elastano e três bolsos. Acompanha etiquetas e embalagem padrão.",
+    "images": [
+      "/promo/1000051626.webp",
+      "/promo/1000051627.webp",
+      "/promo/1000051628.webp",
+      "/promo/1000051629.webp"
+    ]
+  }
+]

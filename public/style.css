@@ -112,3 +112,10 @@ h3{font-size:1.15rem}
   .hero-copy h1 em { display: inline; }
   .brand b { font-size: 28px; }
 }
+
+.offer-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .65rem; }
+.offer-price span { flex-basis: 100%; font-size: .75rem; }
+.offer-price del { color: #b9b0a5; font-size: .85rem; }
+.offer-gallery { margin-top: 2rem; }
+.offer-gallery > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); gap: 1rem; }
+.offer-gallery img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: contain; border-radius: .65rem; background: #151311; }
