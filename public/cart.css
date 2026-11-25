@@ -1,0 +1,7 @@
+.cart-nav { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .4rem 1rem; }
+.cart-items { list-style: none; padding: 0; display: grid; gap: .75rem; }
+.cart-items li { display: flex; align-items: center; gap: 1rem; border: 1px solid var(--line); padding: .75rem; border-radius: .6rem; }
+.cart-items img { display: block; width: 85px; height: 100px; object-fit: contain; }
+#model-order { margin-top: 1rem; display: grid; gap: .5rem; justify-items: start; }
+#order-size { max-width: 100%; padding: .6rem; color-scheme: dark; }
+#cart-feedback a { text-decoration: underline; }

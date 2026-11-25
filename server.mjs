@@ -28,8 +28,8 @@ async function products(query) {
   return response.json();
 }
 
-function layout(body, title = shopName, openGraph = "") {
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><meta name="theme-color" content="#0a0908"><link rel="stylesheet" href="/style.css">${openGraph}</head><body><header class="top"><div class="wrap bar"><a class="brand" href="/" aria-label="${escape(shopName)}"><b>RC7</b><span>MULTIMARCAS</span></a><a class="nav" href="/#catalogo">Ver catálogo</a></div></header>${body}<footer class="wrap footer">${escape(shopName)}</footer></body></html>`;
+function layout(body, title = shopName, openGraph = "", showCart = true) {
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><meta name="theme-color" content="#0a0908"><link rel="stylesheet" href="/style.css">${openGraph}<link rel="stylesheet" href="/cart.css"></head><body><header class="top"><div class="wrap bar"><a class="brand" href="/" aria-label="${escape(shopName)}"><b>RC7</b><span>MULTIMARCAS</span></a><nav class="cart-nav"><a class="nav" href="/#catalogo">Ver catálogo</a>${number && showCart ? '<a class="nav" href="/carrinho">Carrinho <span id="cart-count"></span></a><script src="/cart.js" defer></script>' : ""}</nav></div></header>${body}<footer class="wrap footer">${escape(shopName)}</footer></body></html>`;
 }
 
 function catalog(items) {
@@ -59,13 +59,19 @@ function orderSizes(raw) {
     .filter(value => alpha.includes(value) || /^(?:[1-9]\d{0,2}|U)$/u.test(value)))].map(value => value === "U" ? "Único" : value);
 }
 
+const modelImages = item => item.images ?? [image(item), ...(item.gallery_keys ?? []).map(key => SUPABASE_URL + photos + key)];
+const modelKey = (src, origin) => new URL(src, origin).pathname.split("/").pop();
+
 function detail(item, origin, requestedModel) {
   const link = origin + productPath(item);
-  const galleryImages = item.images?.slice(1) ?? (item.gallery_keys ?? []).map(key => SUPABASE_URL + photos + key);
-  const models = [image(item), ...galleryImages];
-  const modelKey = src => new URL(src, origin).pathname.split("/").pop();
-  const modelLink = src => link + "?modelo=" + encodeURIComponent(modelKey(src));
-  const selected = requestedModel === null ? -1 : models.findIndex(src => modelKey(src) === requestedModel);
+  const models = modelImages(item);
+  const galleryImages = models.slice(1);
+  const modelLink = src => link + "?modelo=" + encodeURIComponent(modelKey(src, origin));
+  const cartItem = (src, index) => escape(JSON.stringify({
+    id: item.id, name: item.name, price: item.price, photo: src,
+    key: modelKey(src, origin), model: galleryImages.length ? "Modelo " + (index + 1) : "",
+  }));
+  const selected = requestedModel === null ? -1 : models.findIndex(src => modelKey(src, origin) === requestedModel);
   if (requestedModel !== null && selected < 0) return null;
   const previewImage = models[selected] ?? models[0];
   const modelLabel = selected < 0 ? "" : "Modelo " + (selected + 1);
@@ -78,30 +84,58 @@ function detail(item, origin, requestedModel) {
     type: "product",
   };
   const og = Object.entries(metadata).map(([key, value]) => `<meta property="og:${key}" content="${escape(value)}">`).join("");
-  const message = `Olá! Tenho interesse nesta peça:\n${item.name}\nValor: ${price(item)}`;
-  const whatsapp = text => "https://wa.me/" + number + "?text=" + encodeURIComponent(text);
   const sizes = orderSizes(item.sizes);
-  const directOrder = selected >= 0
-    ? whatsapp(`${message}\n${modelLabel}\n${modelLink(previewImage)}`)
-    : whatsapp(`${message}\n${link}`);
-  const orderForm = `<form id="model-order" data-order="${escape(directOrder)}" ${galleryImages.length && selected < 0 ? "hidden" : ""}>
+  const orderForm = `<form id="model-order" data-item="${cartItem(previewImage, Math.max(0, selected))}" ${galleryImages.length && selected < 0 ? "hidden" : ""}>
     <label for="order-size">Escolha o tamanho</label>
     ${sizes.length
       ? `<select id="order-size" required><option value="">Selecione</option>${sizes.map(size => `<option>${escape(size)}</option>`).join("")}</select>`
       : '<input id="order-size" type="text" placeholder="Informe o tamanho desejado" maxlength="30" required>'}
-    <button class="button whatsapp" type="submit">Pedir pelo WhatsApp</button>
+    <button class="button" type="submit">Adicionar ao carrinho</button><p id="cart-feedback" role="status"></p>
   </form>`;
   const gallery = galleryImages.length
     ? `<section class="offer-gallery" id="modelos" aria-label="Fotos e modelos"><h2>Fotos e modelos</h2><div>${models.map((src, i) => {
       const label = "Modelo " + (i + 1);
-      const order = whatsapp(`${message}\n${label}\n${modelLink(src)}`);
-      return `<div class="model-option"><a href="${escape(src)}"><img src="${escape(src)}" alt="${escape(item.name)} — ${label}" loading="lazy"></a><span>${label}</span>${number ? `<button type="button" class="secondary" aria-pressed="false" data-order="${escape(order)}" data-model="${label}" aria-label="Escolher peça: ${label}">Escolher peça</button>` : ""}</div>`;
+      return `<div class="model-option"><a href="${escape(src)}"><img src="${escape(src)}" alt="${escape(item.name)} — ${label}" loading="lazy"></a><span>${label}</span>${number ? `<button type="button" class="secondary" aria-pressed="false" data-item="${cartItem(src, i)}" data-model="${label}" aria-label="Escolher peça: ${label}">Escolher peça</button>` : ""}</div>`;
     }).join("")}</div>${number ? `<p id="model-status" aria-live="polite">${modelLabel ? escape(modelLabel) + " escolhido." : "Escolha um modelo para continuar."}</p>${orderForm}` : ""}</section>`
     : "";
   const orderAction = number
     ? galleryImages.length ? '<a class="button" href="#modelos">Escolher modelo</a>' : orderForm
     : "";
-  return layout(`<main class="wrap detail"><a class="nav" href="/#catalogo">Voltar ao catálogo</a><article><img src="${escape(previewImage)}" alt="${escape(metadata["image:alt"])}"><div><p class="eyebrow">${escape(item.category)}</p><h1>${escape(item.name)}</h1>${modelLabel ? `<p class="eyebrow">${modelLabel}</p>` : ""}${prices(item)}<p>${escape(item.description)}</p>${item.sizes ? `<p>Tamanhos: ${escape(item.sizes)}</p>` : ""}${orderAction}</div></article>${gallery}${number ? '<script src="/models.js?v=size" defer></script>' : ""}</main>`, item.name + " | " + shopName, og);
+  return layout(`<main class="wrap detail"><a class="nav" href="/#catalogo">Voltar ao catálogo</a><article><img src="${escape(previewImage)}" alt="${escape(metadata["image:alt"])}"><div><p class="eyebrow">${escape(item.category)}</p><h1>${escape(item.name)}</h1>${modelLabel ? `<p class="eyebrow">${modelLabel}</p>` : ""}${prices(item)}<p>${escape(item.description)}</p>${item.sizes ? `<p>Tamanhos: ${escape(item.sizes)}</p>` : ""}${orderAction}</div></article>${gallery}${number ? '<script src="/models.js?v=cart" defer></script>' : ""}</main>`, item.name + " | " + shopName, og);
+}
+
+async function sharedOrder(url, origin) {
+  const entries = url.searchParams.getAll("item");
+  if (!entries.length || entries.length > 25) return null;
+  const lines = entries.map(value => {
+    try { return JSON.parse(value); } catch { return null; }
+  });
+  if (lines.some(line => !Array.isArray(line) || line.length !== 3 ||
+    typeof line[0] !== "string" || !uuid.test(line[0]) ||
+    typeof line[1] !== "string" || line[1].length > 100 ||
+    typeof line[2] !== "string" || !line[2].trim() || line[2].length > 30)) return null;
+
+  const ids = [...new Set(lines.map(([id]) => id))];
+  const missing = ids.filter(id => !offers.some(item => item.id === id));
+  const items = [...offers, ...(missing.length ? await products("?select=*&id=in.(" + missing.join(",") + ")") : [])];
+  const order = lines.map(([id, key, size]) => {
+    const item = items.find(product => product.id === id);
+    if (!item) return null;
+    const models = modelImages(item);
+    const index = models.findIndex(src => modelKey(src, origin) === key);
+    if (index < 0) return null;
+    return { item, size, photo: models[index], model: models.length > 1 ? "Modelo " + (index + 1) : "" };
+  });
+  const available = order.filter(Boolean);
+  if (!available.length) return null;
+  const total = available.reduce((sum, entry) => sum + entry.item.price, 0);
+  const cards = available.map(({item, size, photo, model}) =>
+    `<li><a href="${escape(photo)}"><img src="${escape(photo)}" alt="${escape(item.name + " " + model)}" loading="lazy"></a><div><strong>${escape(item.name)}</strong><p>${escape([model, "Tamanho: " + size, price(item)].filter(Boolean).join(" · "))}</p></div></li>`).join("");
+  const preview = `<meta property="og:title" content="${escape(shopName)} · Pedido com ${lines.length} peça(s)"><meta property="og:image" content="${escape(new URL(available[0].photo, origin).href)}">`;
+  const summary = available.length === lines.length
+    ? `<p><strong>Total: ${currency.format(total / 100)}</strong></p>`
+    : '<p>Algumas peças ou fotos deste pedido não estão mais disponíveis.</p>';
+  return layout(`<main class="wrap collection"><h1>Fotos do pedido</h1><ul class="cart-items">${cards}</ul>${summary}</main>`, "Pedido | " + shopName, preview, false);
 }
 
 const admin = `<main class="wrap admin"><h1>Painel ADM</h1>
@@ -113,7 +147,7 @@ const admin = `<main class="wrap admin"><h1>Painel ADM</h1>
 <form class="editor" id="editor"><h2>Cadastrar peça</h2><label>Nome<input name="name" maxlength="100" required></label><div class="fields"><label>Categoria<input name="category" maxlength="60" placeholder="Ex.: Camisetas" required></label><label>Preço (R$)<input name="price" inputmode="decimal" placeholder="79,90" required maxlength="10"></label></div><label>Preço anterior (R$)<input name="old_price" inputmode="decimal" placeholder="Opcional" maxlength="10"></label><label>Detalhes da peça (opcional)<textarea name="details" maxlength="1800" placeholder="Ex.: Sarja com elastano, três bolsos"></textarea></label><label>Descrição gerada<textarea name="description" maxlength="2000" required></textarea></label><button type="button" class="secondary" id="regenerate-description">Gerar descrição novamente</button><details><summary>Prévia da legenda</summary><pre id="caption-preview" class="caption-preview"></pre></details><label>Tamanhos disponíveis<input name="sizes" maxlength="100" placeholder="P, M, G, GG"></label><label>Fotos da peça<input name="image" type="file" multiple accept="image/jpeg,image/png,image/webp"></label><span class="muted">Arraste as fotos aqui ou selecione até 100 arquivos JPG, PNG ou WebP de até 50 MB cada. A primeira é a capa. A lista mostra miniaturas das três primeiras fotos. Ao editar, selecionar fotos substitui a galeria.</span><button id="clear-photos" type="button" class="secondary">Limpar seleção de fotos</button><div id="photo-preview" class="photo-preview"></div><div class="actions"><button class="button">Publicar peça</button><button type="button" class="secondary" id="cancel" hidden>Cancelar edição</button></div></form>
 <h2>Peças publicadas</h2><div id="items"></div></section><p id="status" class="notice" role="status"></p></main><script src="/admin.js?v=photo-memory" type="module"></script>`;
 
-const assets = { "/style.css": "text/css; charset=utf-8", "/admin.js": "text/javascript; charset=utf-8", "/offer-parser.mjs": "text/javascript; charset=utf-8", "/models.js": "text/javascript; charset=utf-8", "/catalog.js": "text/javascript; charset=utf-8", "/rc7-logo.webp": "image/webp" };
+const assets = { "/style.css": "text/css; charset=utf-8", "/admin.js": "text/javascript; charset=utf-8", "/offer-parser.mjs": "text/javascript; charset=utf-8", "/cart.css": "text/css; charset=utf-8", "/cart.js": "text/javascript; charset=utf-8", "/models.js": "text/javascript; charset=utf-8", "/catalog.js": "text/javascript; charset=utf-8", "/rc7-logo.webp": "image/webp" };
 
 http.createServer(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -135,7 +169,12 @@ http.createServer(async (req, res) => {
     }
     if (path === "/health") return send(200, "ok", "text/plain");
     if (path === "/config.json") return send(200, JSON.stringify({ url: SUPABASE_URL, key: SUPABASE_PUBLISHABLE_KEY }), "application/json");
-    if (path === "/admin" || path === "/admin/") return send(200, layout(admin, "Painel ADM | " + shopName));
+    if (path === "/admin" || path === "/admin/") return send(200, layout(admin, "Painel ADM | " + shopName, "", false));
+    if (path === "/carrinho" && number) return send(200, layout(`<main class="wrap collection" id="cart" data-phone="${escape(number)}"><h1>Carrinho</h1><ul class="cart-items" id="cart-items"></ul><p id="cart-total" aria-live="polite"></p><a id="cart-whatsapp" class="button" hidden>Enviar pedido pelo WhatsApp</a><p><a class="nav" href="/#catalogo">Continuar escolhendo</a></p></main>`));
+    if (path === "/pedido") {
+      const page = await sharedOrder(new URL(req.url, origin), origin);
+      if (page) return send(200, page);
+    }
     if (path === "/") return send(200, catalog([...offers, ...await products("?select=*&order=created_at.desc")]));
     const id = path.slice("/peca/".length);
     if (path.startsWith("/peca/") && uuid.test(id)) {

@@ -9,23 +9,10 @@ for (const choice of choices) {
       button.setAttribute("aria-pressed", String(button === choice));
       button.textContent = button === choice ? "Peça escolhida" : "Escolher peça";
     }
-    order.dataset.order = choice.dataset.order;
+    order.dataset.item = choice.dataset.item;
     order.hidden = false;
     status.textContent = choice.dataset.model + " escolhido.";
     size.focus();
   });
 }
 
-order.addEventListener("submit", event => {
-  event.preventDefault();
-  const value = size.value.trim();
-  if (!value || order.hidden) {
-    size.focus();
-    return;
-  }
-  const url = new URL(order.dataset.order);
-  const lines = url.searchParams.get("text").split("\n");
-  lines.splice(-1, 0, "Tamanho: " + value);
-  url.searchParams.set("text", lines.join("\n"));
-  window.location.assign(url.href);
-});
