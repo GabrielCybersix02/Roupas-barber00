@@ -66,17 +66,26 @@ document.querySelector("#regenerate-description").addEventListener("click", () =
   updateDescription();
 });
 
-function showPhotos() {
+function clearPhotoPreview() {
+  for (const img of photoPreview.querySelectorAll("img")) img.removeAttribute("src");
   for (const url of previewUrls) URL.revokeObjectURL(url);
   previewUrls = [];
   photoPreview.replaceChildren();
+}
+
+function showPhotos() {
+  clearPhotoPreview();
   for (const [index, file] of selectedPhotos.entries()) {
-    const img = document.createElement("img");
-    img.loading = "lazy";
-    img.alt = index === 0 ? "Capa" : "Foto " + (index + 1);
-    img.src = URL.createObjectURL(file);
-    previewUrls.push(img.src);
     const tile = document.createElement("div");
+    if (index < 3) {
+      const img = document.createElement("img");
+      img.alt = index === 0 ? "Capa" : "Foto " + (index + 1);
+      img.src = URL.createObjectURL(preparedPhotos.get(file) ?? file);
+      previewUrls.push(img.src);
+      tile.append(img);
+    }
+    const label = document.createElement("span");
+    label.textContent = `${index + 1}. ${file.name} `;
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "secondary";
@@ -87,7 +96,7 @@ function showPhotos() {
       showPhotos();
       status.textContent = `${selectedPhotos.length} de ${maxPhotos} fotos selecionadas.`;
     });
-    tile.append(img, remove);
+    tile.append(label, remove);
     photoPreview.append(tile);
   }
 }
@@ -124,12 +133,22 @@ document.querySelector("#clear-photos").addEventListener("click", () => {
 async function preparePhoto(file) {
   let source;
   let url;
+  let fallbackImage;
+  let canvas;
+  function releaseSource() {
+    source?.close?.();
+    source = undefined;
+    fallbackImage?.removeAttribute("src");
+    fallbackImage = undefined;
+    if (url) URL.revokeObjectURL(url);
+    url = undefined;
+  }
   try {
     try {
       source = await createImageBitmap(file);
     } catch {
       url = URL.createObjectURL(file);
-      const img = new Image();
+      const img = fallbackImage = new Image();
       img.src = url;
       try {
         await img.decode();
@@ -142,16 +161,20 @@ async function preparePhoto(file) {
     const height = source.naturalHeight ?? source.height;
     const scale = Math.min(1, 1600 / Math.max(width, height));
     if (scale === 1 && file.size <= 1024 * 1024) return file;
-    const canvas = document.createElement("canvas");
+    canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(width * scale));
     canvas.height = Math.max(1, Math.round(height * scale));
     canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+    releaseSource();
     const optimized = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.84));
     if (!optimized || optimized.size > maxPhotoBytes) throw new Error("Não foi possível otimizar a imagem.");
     return optimized;
   } finally {
-    source?.close?.();
-    if (url) URL.revokeObjectURL(url);
+    releaseSource();
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
   }
 }
 
@@ -370,6 +393,9 @@ editor.addEventListener("submit", event => {
     const files = [...selectedPhotos];
     if (!files.length && !previous) throw new Error("Adicione pelo menos uma foto.");
 
+    clearPhotoPreview();
+    // Give the browser a frame to discard decoded thumbnails before reading the originals.
+    await new Promise(resolve => setTimeout(resolve, 50));
     const invalid = [];
     for (const [index, file] of files.entries()) {
       if (preparedPhotos.has(file)) continue;
@@ -379,6 +405,7 @@ editor.addEventListener("submit", event => {
       } catch {
         invalid.push(`${index + 1} (${file.name})`);
       }
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
     if (invalid.length) {
       throw new Error(`Não foi possível preparar: ${invalid.join(", ")}. Remova ou substitua essas fotos. As demais continuam selecionadas.`);
@@ -420,5 +447,5 @@ editor.addEventListener("submit", event => {
     resetEditor();
     await list();
     status.textContent = "Peça publicada no catálogo.";
-  });
+  }).finally(showPhotos);
 });
