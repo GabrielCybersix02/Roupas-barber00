@@ -56,15 +56,49 @@ function updateCart() {
     list.append(row);
   }
   document.querySelector("#cart-total").textContent = items.length ? "Valor total: " + formatPrice(total) : "Seu carrinho está vazio.";
-  checkout.hidden = items.length === 0;
+  void prepareCheckout(checkout, items, total);
+}
+
+let revision = 0;
+async function prepareCheckout(button, items, total) {
+  const current = ++revision;
+  const status = document.querySelector("#cart-image-status");
+  button.hidden = status.hidden = !items.length;
+  button.disabled = true;
+  button.onclick = null;
   if (!items.length) return;
-  const preview = new URL("/pedido", location.origin);
-  const lines = items.map((item, index) => {
-    preview.searchParams.append("item", JSON.stringify([item.id, item.key, item.size]));
-    return (index + 1) + ". " + [item.name, item.model, "Tamanho: " + item.size, formatPrice(item.price)].filter(Boolean).join(" · ");
-  });
-  const message = ["Olá! Gostaria de pedir:", "", ...lines, "", "Valor total: " + formatPrice(total), "", "Fotos dos modelos: " + preview.href].join("\n");
-  checkout.href = "https://wa.me/" + cart.dataset.phone + "?text=" + encodeURIComponent(message);
+  status.textContent = "Preparando a imagem do pedido…";
+  try {
+    const { orderImage } = await import("/order-image.js");
+    const file = await orderImage(items, total, formatPrice, () => current === revision);
+    if (current !== revision) return;
+    const payload = { files: [file] };
+    const canShare = navigator.share && navigator.canShare?.(payload);
+    status.textContent = canShare ? "Escolha o WhatsApp e a conversa da RC7."
+      : "Neste navegador, o botão baixa a imagem para anexar no WhatsApp.";
+    button.onclick = async () => {
+      if (canShare) {
+        try {
+          await navigator.share(payload);
+          return;
+        } catch (error) {
+          if (error.name === "AbortError" || current !== revision) return;
+        }
+      }
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      status.textContent = "Anexe a imagem baixada na conversa da RC7.";
+    };
+  } catch {
+    if (current !== revision) return;
+    status.textContent = "Não foi possível montar a imagem. Toque para tentar novamente.";
+    button.onclick = () => { void prepareCheckout(button, items, total); };
+  }
+  button.disabled = false;
 }
 
 document.querySelector("#model-order")?.addEventListener("submit", event => {
