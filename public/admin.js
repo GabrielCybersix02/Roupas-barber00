@@ -308,7 +308,7 @@ if (callback.get("type") === "recovery" && callback.get("access_token")) {
 }
 
 document.querySelector("#forgot").addEventListener("click", () => {
-  recovery.elements.email.value = login.elements.email.value;
+  recovery.elements.email.value = login.elements.email?.value ?? "";
   login.hidden = true;
   recovery.hidden = false;
   recovery.elements.email.focus();
@@ -346,13 +346,22 @@ login.addEventListener("submit", event => {
   void busy(login, async () => {
     const fields = new FormData(login);
     try {
-      const session = await request("/auth/v1/token?grant_type=password", {
+      let session;
+      if (login.elements.username) {
+        const response = await fetch("/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: fields.get("username"), password: fields.get("password") }),
+        });
+        if (!response.ok) throw new Error();
+        session = await response.json();
+      } else session = await request("/auth/v1/token?grant_type=password", {
         method: "POST",
         body: { email: fields.get("email").trim(), password: fields.get("password") },
       });
       token = session.access_token;
     } catch {
-      throw new Error("Não foi possível entrar. Confira seu e-mail e sua senha do Supabase.");
+      throw new Error("Não foi possível entrar. Confira seus dados de acesso.");
     }
     const roles = await request("/rest/v1/clothing_catalog_admins?select=user_id");
     if (!roles.length) {

@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const offers = JSON.parse(await readFile(new URL("./black-ofertas.json", import.meta.url), "utf8"));
 
 const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, WHATSAPP_NUMBER, RENDER_EXTERNAL_URL } = process.env;
+const adminEmail = process.env.RC7_ADMIN_EMAIL;
 const shopName = process.env.SHOP_NAME || "RC7 Multimarcas";
 const number = (WHATSAPP_NUMBER || "").replace(/\D/g, "");
 const table = "/rest/v1/clothing_catalog_products";
@@ -154,13 +155,13 @@ async function sharedOrder(url, origin, asImage = false) {
 }
 
 const admin = `<main class="wrap admin"><h1>Painel ADM</h1>
-<form id="login" class="editor"><label>E-mail<input name="email" type="email" autocomplete="username" required></label><label>Senha<input name="password" type="password" autocomplete="current-password" required></label><button class="button">Entrar</button><button type="button" class="secondary" id="forgot">Esqueci minha senha</button></form>
+<form id="login" class="editor">${adminEmail ? '<label>Usuário<input name="username" autocomplete="username" required></label>' : '<label>E-mail<input name="email" type="email" autocomplete="username" required></label>'}<label>Senha<input name="password" type="password" autocomplete="current-password" required></label><button class="button">Entrar</button><button type="button" class="secondary" id="forgot">Esqueci minha senha</button></form>
 <form id="recovery" class="editor" hidden><h2>Recuperar senha</h2><label>E-mail<input name="email" type="email" autocomplete="email" required></label><button class="button">Enviar link de recuperação</button><a href="/admin">Voltar ao login</a></form>
 <form id="new-password" class="editor" hidden><h2>Definir nova senha</h2><label>Nova senha<input name="password" type="password" autocomplete="new-password" minlength="8" required></label><label>Confirme a nova senha<input name="confirmation" type="password" autocomplete="new-password" minlength="8" required></label><button class="button">Salvar senha</button></form>
 <section id="manager" hidden><button type="button" class="secondary" id="logout">Sair</button>
 <form class="editor" id="import-offer"><h2>Importar oferta</h2><label>Texto do WhatsApp<textarea name="message" required placeholder="Cole a mensagem com nome, detalhes e preços"></textarea></label><button class="button">Preencher prévia</button></form>
 <form class="editor" id="editor"><h2>Cadastrar peça</h2><label>Nome<input name="name" maxlength="100" required></label><div class="fields"><label>Categoria<input name="category" maxlength="60" placeholder="Ex.: Camisetas" required></label><label>Preço (R$)<input name="price" inputmode="decimal" placeholder="79,90" required maxlength="10"></label></div><label>Preço anterior (R$)<input name="old_price" inputmode="decimal" placeholder="Opcional" maxlength="10"></label><label>Detalhes da peça (opcional)<textarea name="details" maxlength="1800" placeholder="Ex.: Sarja com elastano, três bolsos"></textarea></label><label>Descrição gerada<textarea name="description" maxlength="2000" required></textarea></label><button type="button" class="secondary" id="regenerate-description">Gerar descrição novamente</button><details><summary>Prévia da legenda</summary><pre id="caption-preview" class="caption-preview"></pre></details><label>Tamanhos disponíveis<input name="sizes" maxlength="100" placeholder="P, M, G, GG"></label><label>Fotos da peça<input name="image" type="file" multiple accept="image/jpeg,image/png,image/webp"></label><span class="muted">Arraste as fotos aqui ou selecione até 100 arquivos JPG, PNG ou WebP de até 50 MB cada. A primeira é a capa. A lista mostra miniaturas das três primeiras fotos. Ao editar, selecionar fotos substitui a galeria.</span><button id="clear-photos" type="button" class="secondary">Limpar seleção de fotos</button><div id="photo-preview" class="photo-preview"></div><div class="actions"><button class="button">Publicar peça</button><button type="button" class="secondary" id="cancel" hidden>Cancelar edição</button></div></form>
-<h2>Peças publicadas</h2><div id="items"></div></section><p id="status" class="notice" role="status"></p></main><script src="/admin.js?v=photo-memory" type="module"></script>`;
+<h2>Peças publicadas</h2><div id="items"></div></section><p id="status" class="notice" role="status"></p></main><script src="/admin.js?v=rafael-login" type="module"></script>`;
 
 const assets = { "/style.css": "text/css; charset=utf-8", "/admin.js": "text/javascript; charset=utf-8", "/offer-parser.mjs": "text/javascript; charset=utf-8", "/cart.css": "text/css; charset=utf-8", "/order-image.js": "text/javascript; charset=utf-8", "/cart.js": "text/javascript; charset=utf-8", "/models.js": "text/javascript; charset=utf-8", "/catalog.js": "text/javascript; charset=utf-8", "/rc7-logo.webp": "image/webp" };
 
@@ -174,6 +175,32 @@ http.createServer(async (req, res) => {
     res.writeHead(status, { "Content-Type": type });
     res.end(req.method === "HEAD" ? undefined : body);
   };
+  if (req.method === "POST" && path === "/admin/login" && adminEmail) {
+    res.setHeader("Cache-Control", "no-store");
+    const json = (status, value) => send(status, JSON.stringify(value), "application/json");
+    if (req.headers.origin !== origin || req.headers["content-type"] !== "application/json") return json(403, {});
+    try {
+      let body = "";
+      for await (const chunk of req) {
+        body += chunk;
+        if (body.length > 4096) return json(413, {});
+      }
+      const { username, password } = JSON.parse(body);
+      if (typeof username !== "string" || username.trim().toLowerCase() !== "rafael" ||
+          typeof password !== "string" || !password || password.length > 1024) return json(401, {});
+      const response = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=password", {
+        method: "POST",
+        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: adminEmail, password }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) return json(response.status === 429 ? 429 : 401, {});
+      const { access_token } = await response.json();
+      return access_token ? json(200, { access_token }) : json(502, {});
+    } catch {
+      return json(400, {});
+    }
+  }
   if (!["GET", "HEAD"].includes(req.method)) return send(405, "Método não permitido.");
   try {
     if (Object.hasOwn(assets, path)) return send(200, await readFile(new URL("./public" + path, import.meta.url)), assets[path]);
